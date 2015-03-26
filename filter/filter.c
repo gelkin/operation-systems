@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <string.h>
+#include "filter.h"
 #include "helpers.h"
 
 #define BUF_SIZE 4096
@@ -14,7 +15,7 @@ char* get_line(char *buf, size_t n)
     char* line = (char*) malloc(n + 1);
     memcpy(line, buf, n);
     line[n] = '\0';
-    
+
     return line;
 }
 
@@ -28,28 +29,37 @@ int process_buffer(char *buf, size_t size, int argc, char* argv[])
         {
             ++counter;
         }
-        
+
         int line_length = counter - offset;
-        char* line = get_line(buf, line_length);
+        char* line = get_line(buf + offset, line_length);
         argv[argc - 1] = line;
-        
-        int res = spawn(argv[0], argv[1]);        
+
+        int res = spawn(argv[0], argv);
         if (res == EXIT_SUCCESS)
         {
             int on_write = write_(STDOUT_FILENO, line, line_length);
             if (on_write < 0)
             {
+                perror("Error while writing");
+                return -1;
+            }
+            
+            // write '\n'
+            on_write = write_(STDOUT_FILENO, "\n", 1);
+            if (on_write < 0)
+            {
+                perror("Error while writing");
                 return -1;
             }
         }
-        else
+        else if (res < 0)
         {
             perror("Error while calling 'spawn'");
             return -1;
         }
 
         free(line);
-        
+
         if (buf[counter] == DELIM)
         {
             offset = ++counter;
@@ -60,7 +70,7 @@ int process_buffer(char *buf, size_t size, int argc, char* argv[])
         }
     }
 
-    return write_(STDOUT_FILENO, buf, size);
+    return 1;
 }
 
 int last_delim_pos(char *buf, size_t size)
@@ -77,9 +87,9 @@ int last_delim_pos(char *buf, size_t size)
     return pos;
 }
 
+// shift args to the left EXEPT NULL-argument at the end
 void shift_left_args(int argc, char* argv[])
 {
-    // shift args to the left EXEPT NULL-argument at the end
     for (int i = 0; i < (argc - 1); ++i)
     {
         argv[i] = argv[i + 1];
@@ -89,7 +99,7 @@ void shift_left_args(int argc, char* argv[])
 int main(int argc, char* argv[])
 {
     shift_left_args(argc, argv);
-    
+
     char buf[BUF_SIZE];
     int read_bytes = 0;
     int offset = 0;
@@ -127,3 +137,4 @@ int main(int argc, char* argv[])
     }
     return EXIT_SUCCESS;
 }
+

@@ -1,6 +1,9 @@
+#include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include "helpers.h"
 
@@ -71,20 +74,49 @@ ssize_t read_until(int fd, void *buf, size_t count, char delimiter)
     }
 }
 
+// redirect stdout and stderr to /dev/null
+static int redirect()
+{
+    int fd = open("/dev/null", O_WRONLY);
+    if (fd < 0)
+    {
+        return -1;
+    }
+    int on = dup2(fd, STDOUT_FILENO);
+    if (on < 0)
+    {
+        return -1;
+    }
+    on = dup2(fd, STDERR_FILENO);
+    if (on < 0)
+    {
+        return -1;
+    }
+
+    return 1;
+}
+
 int spawn(const char * file, char * const argv [])
 {
+    int status = 0;
     int pid = fork();
     if (pid == 0)
     {
-       int on_exec = execvp(file, argv);
-       if (on_exec < 0)
-       {
-           return EXIT_FAILURE;
-       }
+        int on_redirect = redirect();
+        if (on_redirect < 0)
+        {
+            perror("Couldn't redirect");
+            return -1;
+        }
+
+        int on_exec = execvp(file, argv);
+        if (on_exec < 0)
+        {
+            return EXIT_FAILURE;
+        }
     }
     else if (pid > 0)
     {
-        int status = 0;
         int on_wait = wait(&status);
         if (WEXITSTATUS(status) == EXIT_FAILURE ||
             on_wait != pid) {
@@ -93,10 +125,11 @@ int spawn(const char * file, char * const argv [])
     }
     else
     {
-        return EXIT_FAILURE;
+        perror("Couldn't make fork");
+        return -1;
     }
 
-    return EXIT_SUCCESS;
+    return status;
 }
 
 
