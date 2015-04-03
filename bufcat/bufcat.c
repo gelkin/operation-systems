@@ -1,6 +1,6 @@
 #include "bufio.h"
 
-#define BUF_SIZE 10
+#define BUF_SIZE 4096
 
 int main() 
 {
