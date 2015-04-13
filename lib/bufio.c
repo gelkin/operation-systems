@@ -1,4 +1,3 @@
-
 #include "bufio.h"
 
 struct buf_t
@@ -118,3 +117,140 @@ ssize_t buf_flush(fd_t fd, struct buf_t *buf, size_t required)
         return -1;
     }
 }
+
+#define DELIM '\n'
+#define END_OF_STR '\0'
+
+ssize_t delim_pos(struct buf_t *buf, char delim)
+{
+    ssize_t len = -1;
+    for (int i = 0; i < buf_size(buf); ++i)
+    {
+        if (buf->buffer[i] == delim)
+        {
+            len = i;
+            break;
+        }
+    }
+    return len;
+}
+
+// return (size of line + 1) - '\0' symbol
+ssize_t buf_getline(fd_t fd, struct buf_t *buf, char* dest)
+{
+    ssize_t len = 0;
+    ssize_t read_bytes = 0; 
+    ssize_t offset = 0; 
+
+    do
+    {
+        len = delim_pos(buf, DELIM);
+
+        if (len != -1)
+        {
+            memcpy(dest, buf->buffer, len);
+            dest[len] = END_OF_STR;
+        
+            // move buf
+            memmove(buf->buffer, buf->buffer + len + 1, buf_size(buf) - len - 1); 
+            buf->size = buf_size(buf) - len - 1;
+
+            return len + 1; // with '\0' symbol
+        }
+        else
+        {
+            memcpy(dest + offset, buf->buffer, buf_size(buf));
+            
+            // make buffer empty
+            offset += buf->size;
+            buf->size = 0;
+        }
+    } while ((read_bytes = buf_fill(fd, buf, buf_capacity(buf))) > 0);
+
+    if (read_bytes == 0)
+    {
+        if (offset == 0)
+        {
+            return 0; // EOF
+        }
+        else
+        {
+            // next read will meet EOF 
+            dest[offset] = END_OF_STR;
+            return offset + 1; // with '\0' symbol
+        }
+    }
+    else
+    {
+        perror("Error while filling buffer");
+        return -1;
+    }
+}
+
+// return buf_size after flushing
+ssize_t buf_write(fd_t fd, struct buf_t *buf, char* src, size_t len)
+{
+    ssize_t to_write = len;
+    ssize_t offset = 0;
+    while (to_write > 0)
+    {
+        if (buf_capacity(buf) - buf_size(buf) >= to_write)
+        {
+            // write to buffer and that's it
+            memcpy(buf->buffer + buf_size(buf), src + offset, to_write);
+            buf->size += to_write;
+            
+            break;
+        }
+        else
+        {
+            ssize_t cur_to_write = buf_capacity(buf) - buf_size(buf); 
+            to_write -= cur_to_write; 
+
+            memcpy(buf->buffer + buf_size(buf), src + offset, cur_to_write);
+            buf->size += cur_to_write;
+            offset += cur_to_write;
+
+            ssize_t on_flush = buf_flush(fd, buf, buf_size(buf));
+            if (on_flush < 0)
+            {
+                perror("Error while flushing");
+                return -1;
+            }
+        }
+    }
+    
+    return buf_size(buf);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
