@@ -1,3 +1,4 @@
+#define _POSIX_SOURCE
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -5,7 +6,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <signal.h>
+#include <string.h>
+
 #include "helpers.h"
+
 
 ssize_t read_(int fd, void *buf, size_t count)
 {
@@ -131,6 +136,159 @@ int spawn(const char * file, char * const argv [])
 
     return status;
 }
+
+struct execargs_t
+{
+    const char * file;
+    char * const argv [];
+    int reader_fd;
+    int writer_fd;
+};
+
+int exec(struct execargs_t* args)
+{
+    int pid = fork();
+    if (pid == 0)
+    {
+        if (dup2(args->reader_fd, STDIN_FILENO) < 0)
+        {
+            perror("dup2");
+            return -1;
+        }
+        if (close(args->reader_fd) < 0)
+        {
+            perror("close");
+            return -1; 
+        }
+
+        if (dup2(args->writer_fd, STDOUT_FILENO) < 0)
+        {
+            perror("dup2");
+            return -1;
+        }
+        if (close(args->writer_fd) < 0)
+        {
+            perror("close");
+            return -1;
+        }
+
+        int on_exec = execvp(args->file, args->argv);
+        if (on_exec < 0)
+        {
+            return -1;
+        }
+    }
+    else if (pid > 0)
+    {
+        return pid;
+    }
+    else
+    {
+        perror("fork");
+        return -1;
+    }
+}
+
+// TODO FUUU it's disgusting
+int* pids;
+size_t pids_number;
+
+void pipe_sigint_handler(int signal)
+{
+    for (int i = 0; i < pids_number; ++i)
+    {
+        if (pids[i] != 0)
+        {
+            if (kill(pids[i], SIGTERM) < 0)
+            {
+                perror("termination");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    exit(EXIT_SUCCESS);
+}
+
+int terminate_child_processes(int* pids, size_t size)
+{
+    for (int i = 0; i < size; ++i)
+    {
+        if (kill(pids[i], SIGTERM) < 0)
+        {
+            perror("termination");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int runpiped(struct execargs_t** programs, size_t n)
+{
+    pids[n];
+    pids_number = n;
+    for (int i = 0; i < n; ++i)
+    {
+        pids[i] = 0;
+    }
+    
+    struct sigaction act;
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = pipe_sigint_handler;
+    if (sigaction(SIGINT, &act, 0) < 0)
+    {
+        perror("sigaction");
+        return -1;
+    }
+
+    int read_fd = STDIN_FILENO;
+    for (int i = 0; i < n; ++i)
+    {
+        if (i < n - 1)
+        {
+            int pipefd[2];
+            pipe(pipefd);
+
+            programs[i]->reader_fd = read_fd;
+            programs[i]->writer_fd = pipefd[1];
+            int on_exec = exec(programs[i]);
+            if (on_exec < 0)
+            {
+                terminate_child_processes(pids, i);
+                return -1;
+            }
+            pids[i] = on_exec;
+            read_fd = pipefd[0];
+        }
+        else
+        {
+            programs[i]->reader_fd = read_fd;
+            programs[i]->writer_fd = STDOUT_FILENO;
+            int on_exec = exec(programs[i]);
+            if (on_exec < 0)
+            {
+                terminate_child_processes(pids, i);
+                return -1;
+            }
+            pids[n - 1] = on_exec;
+        }
+    }
+
+    int status;
+    if (wait(&status) < 0) 
+    {
+        return -1;
+    }
+
+    if (terminate_child_processes(pids, n))
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+
+
 
 
 
