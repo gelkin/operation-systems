@@ -1,3 +1,4 @@
+// TODO
 #define _POSIX_SOURCE
 #include <stdio.h>
 #include <unistd.h>
@@ -137,10 +138,11 @@ int spawn(const char * file, char * const argv [])
     return status;
 }
 
+/*
 struct execargs_t
 {
-    const char * file;
-    char * const argv [];
+    char* file;
+    char** argv;
     int reader_fd;
     int writer_fd;
 };
@@ -178,15 +180,12 @@ int exec(struct execargs_t* args)
             return -1;
         }
     }
-    else if (pid > 0)
-    {
-        return pid;
-    }
-    else
+    else if (pid < 0)
     {
         perror("fork");
         return -1;
     }
+    return pid;
 }
 
 // TODO FUUU it's disgusting
@@ -224,7 +223,7 @@ int terminate_child_processes(int* pids, size_t size)
 
 int runpiped(struct execargs_t** programs, size_t n)
 {
-    pids[n];
+    pids = (int*) malloc(sizeof(int) * n);
     pids_number = n;
     for (int i = 0; i < n; ++i)
     {
@@ -287,7 +286,7 @@ int runpiped(struct execargs_t** programs, size_t n)
     return 0;
 }
 
-
+*/
 
 
 
