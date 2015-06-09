@@ -223,6 +223,11 @@ ssize_t buf_write(fd_t fd, struct buf_t *buf, char* src, size_t len)
     return buf_size(buf);
 }
 
+void buf_set_size(struct buf_t* buf, size_t new_size)
+{
+    buf->size = new_size;
+}
+
 
 
 
